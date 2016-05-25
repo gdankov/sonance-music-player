@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="Sonata-Music-Player",
+    name="Sonance-Music-Player",
     version="0.0.1 Pre-Alpha",
     packages=find_packages(),
     author="Georgi Dankov",
