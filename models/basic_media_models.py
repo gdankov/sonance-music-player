@@ -4,14 +4,13 @@ ACCEPTED_TYPES = ['.mp3', '.wav', '.ogg', '.flac', '.m4a']
 
 
 class Song():
-    def __init__(self, url, file_type=None):
-        self.url = url
-        self.type = file_type
-        self.metadata = Metadata(self.url)
+    def __init__(self, abs_url):
+        self.abs_url = abs_url
+        self.metadata = Metadata(self.abs_url)
         self.tags = self.metadata.get_tags()
         self.summary = self.metadata.get_summary()
         # probably dont need that
-        self.summary['file_name'] = self.url
+        self.summary['file_name'] = self.abs_url
 
     def __str__(self):
         return """
