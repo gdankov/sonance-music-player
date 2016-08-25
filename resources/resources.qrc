@@ -1,0 +1,12 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <file>left_sidebar_icons/default_album_cover.png</file>
+    <file>left_sidebar_icons/plus_circle_black.png</file>
+    <file>left_sidebar_icons/plus_circle_white.png</file>
+    <file>left_sidebar_icons/plus_icon.png</file>
+    <file>left_sidebar_icons/trash_black_24x24.png</file>
+    <file>left_sidebar_icons/trash_white_24x24.png</file>
+    <file>left_sidebar_icons/music.png</file>
+    <file>left_sidebar_icons/playlist_64x64.png</file>
+</qresource>
+</RCC>

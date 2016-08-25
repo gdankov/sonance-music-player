@@ -1,1 +1,2 @@
-__all__ = ["helper_struct", "models"]
+__all__ = ['cover_art_display', 'delegates', 'helper_struct', 'left_sidebar',
+           'main_window', 'models', 'widgets']

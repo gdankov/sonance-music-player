@@ -1,1 +1,1 @@
-__all__ = ['playlist_models', 'basic_media_models', 'metadata']
+__all__ = ['basic_media_models']

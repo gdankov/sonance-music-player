@@ -1,22 +1,54 @@
 from PyQt5 import QtCore, QtGui
+from PyQt5.QtCore import pyqtSignal, QModelIndex
 from PyQt5.QtGui import QIcon, QFont
 
-from gui.helper_struct import TreeNode
+from .helper_struct import TreeNode
+from util import seconds_to_hms
 
 
 class TreeModel(QtCore.QAbstractItemModel):
+
+    dataChangedEnhanced = pyqtSignal(str, str, QModelIndex)
+
     def __init__(self, data={}, parent=None):
         super(QtCore.QAbstractItemModel, self).__init__(parent)
 
-        rootData = [' ']                     # empty string for the root item
+        rootData = [' ']        # empty string for the root item
         self.__root = TreeNode(rootData)
 
-    def addToModel(self, topLevelItem, childrenItems):
-        parent = TreeNode(topLevelItem, self.__root)
-        self.__root.appendChild(parent)
-        for secondLevelData in childrenItems:
-            child = TreeNode(secondLevelData, parent)
+    def getTopLevelIndex(self, name):
+        row = self.__root.getChildIndex(name)
+        column = 0
+        if not row == -1:
+            return self.index(row, column)
+        else:
+            return QModelIndex
+
+    def getIndexFromUuid(self, uuid):
+        playlistIndex = self.getTopLevelIndex('PLAYLISTS')
+        playlist = self.__root.child(playlistIndex.row())
+        return playlist.getChildIndexFromUuid(uuid)
+
+    def addTopLevelItems(self, items):
+        for item in items:
+            node = TreeNode(item, parent=self.__root)
+            self.__root.appendChild(node)
+
+    def addChildItems(self, parentItem, childItems):
+        if not self.isTopLevelItem(parentItem):
+            return False
+
+        parent = self.__root.getChildByName(parentItem)
+        for child in childItems:
+            if isinstance(child, tuple):
+                itemData, valueData = childItems
+                child = TreeNode(itemData, valueData, parent=parent)
+            else:
+                child = TreeNode(itemData, parent=parent)
             parent.appendChild(child)
+
+    def isTopLevelItem(self, item):
+        return item in [child.itemData() for child in self.__root.children()]
 
     def index(self, row, column, parent=QtCore.QModelIndex()):
         if not self.hasIndex(row, column, parent):
@@ -66,8 +98,8 @@ class TreeModel(QtCore.QAbstractItemModel):
         if not index.isValid():
             return QtCore.QVariant()
 
-        if role == QtCore.Qt.DisplayRole:
-            return index.internalPointer().data()
+        if role == QtCore.Qt.DisplayRole or role == QtCore.Qt.EditRole:
+            return index.internalPointer().itemData()
         elif role == QtCore.Qt.ToolTipRole:
             pass
         elif role == QtCore.Qt.DecorationRole:
@@ -75,6 +107,22 @@ class TreeModel(QtCore.QAbstractItemModel):
         elif role == QtCore.Qt.FontRole:
             font = QFont("Times", 15)
             return font
+        # elif role == QtCore.Qt.EditRole:
+        #     return "ale"
+
+    def setData(self, index, value, role=QtCore.Qt.EditRole):
+        if not role == QtCore.Qt.EditRole:
+            return False
+
+        item = self.getItem(index)
+        oldValue = item.itemData()
+        isChanged = item.setData(value)
+
+        if isChanged:
+            self.dataChanged.emit(index, index)
+            self.dataChangedEnhanced.emit(value, oldValue, index)
+
+        return isChanged
 
     def flags(self, index):
         if not index.isValid():
@@ -82,41 +130,61 @@ class TreeModel(QtCore.QAbstractItemModel):
 
         if index.internalPointer() in self.__root.children():
             return QtCore.Qt.ItemIsEnabled
-        return QtCore.QAbstractItemModel.flags(self, index)
-        
-        # if not index.parent.isValid():
-        #     return None
-        # else:
-        #     return QtCore.Qt.ItemIsEnabled
-        # elif parent is playlist, eddit is ok 
+        elif index.parent().isValid() and index.parent().row() == 1:            #FIXIT should not be hardcoded
+            return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsEditable | \
+                QtCore.Qt.ItemNeverHasChildren | QtCore.Qt.ItemIsSelectable
+        return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable | \
+            QtCore.Qt.ItemNeverHasChildren
 
     def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
         return QtCore.QVariant()
 
-    def insertRow(self, row, parent=QtCore.QModelIndex()):
-        pass
+    def getItem(self, index):
+        if index.isValid():
+            item = index.internalPointer()
+            if item:
+                return item
+        return self.__root
 
-    def insertRows(self, row, count, parent=QtCore.QModelIndex()):
-        pass
+    def getItemUuid(self, index):
+        return index.internalPointer().valueData()
+
+    def insertRow(self, position, parent=QtCore.QModelIndex()):
+        parentItem = self.getItem(parent)
+        self.beginInsertRows(parent, position, position + 1)
+        isInserted = parentItem.insertChild(position)
+        self.endInsertRows()
+
+        return isInserted
 
     def removeRow(self, row, parent=QtCore.QModelIndex()):
-        pass
+        parentItem = self.getItem(parent)
 
-    def removeRows(self, row, count, parent=QtCore.QModelIndex()):
-        pass
+        self.beginRemoveRows(parent, row, row + 1)
+        areRemoved = parentItem.removeChild(row)
 
-    # TODO def setIcon(item, icon) set icons for every item, but from outside the class
+        self.endRemoveRows()
+
+        return areRemoved
+
+    def insertPlaylistEntry(self, position, name, value,
+                            parent=QtCore.QModelIndex):
+
+        parentItem = self.getItem(parent)
+        self.beginInsertRows(parent, position, position + 1)
+        isInserted = parentItem.insertChild(position, name, value)
+        self.endInsertRows()
+
+        return isInserted
 
     def __getIcon(self, index):
+        if index.internalPointer().parentItem().itemData() == 'PLAYLISTS':
+            return QIcon(":/left_sidebar_icons/playlist_64x64.png")
 
-        if index.internalPointer().parentItem().data() == 'PLAYLISTS':
-            #return some icon
-            pass
-
-        itemName = index.data()
+        itemName = index.internalPointer().itemData()
 
         if itemName == 'Songs':
-            return QIcon("./left_sidebar_icons/music.png")
+            return QIcon(":/left_sidebar_icons/music.png")
         elif itemName == 'Artists':
             pass
         elif itemName == 'Albums':
@@ -128,46 +196,79 @@ class TreeModel(QtCore.QAbstractItemModel):
 
 
 class PlaylistModel(QtCore.QAbstractTableModel):
-    COLUMN_COUNT = 5
-    HEADERS = ['title', 'artist', 'album', 'genre', 'file name']
 
-    # add playlist=None
-    def __init__(self, headers=[], parent=None):
+    DEFAULT_HEADERS = ['TITLE', 'LENGTH', 'ARTIST', 'ALBUM', 'GENRE']
+
+    def __init__(self, uuid, headers=[], parent=None):
         super(PlaylistModel, self).__init__(parent)
-        self.__headers = headers
-        self.__playlist = None
-        self.urlSongMappings = {}
+        if not headers:
+            self.__headers = self.DEFAULT_HEADERS
+        self.__uuid = uuid
+        self.__column_count = len(self.__headers)
+        self.__playlist = []
 
     def rowCount(self, parent=QtCore.QModelIndex()):
-        return self.__playlist.mediaCount() if not parent.isValid() else 0
+        if not parent.isValid() and self.__playlist:
+            return len(self.__playlist)
+        else:
+            return 0
+
+    def getUuid(self):
+        return self.__uuid
+
+    # for debugging
+    def printElems(self):
+        for elem in self.__playlist:
+            print(elem)
 
     def columnCount(self, parent=QtCore.QModelIndex()):
         return len(self.__headers) if not parent.isValid() else 0
+
+    def index(self, row, column, parent=QtCore.QModelIndex()):
+        if self.__playlist and self.__indexExists(row, column, parent):
+            return self.createIndex(row, column)
+        return QtCore.QModelIndex()
+
+    def __indexExists(self, row, column, parent):
+        if parent.isValid():
+            return False
+        if(row >= 0 and row < self.rowCount() and
+                column >= 0 and column < self.columnCount()):
+            return True
+        return False
+
+    def parent(self, child):
+        return QtCore.QModelIndex()
 
     def data(self, index, role=QtCore.Qt.DisplayRole):
         # TODO CHECK DIFFERENT ROLES
         # if index.isValid() and role == QtCore.Qt.ToolTipRole:
         #     print("HEYo")
         #     return "TOOLTIP BIATCH"
-
-        if not index.isValid() or not role == QtCore.Qt.DisplayRole:
+        if not index.isValid():
             return QtCore.QVariant()
 
-        if index.column() == self.HEADERS.index('title'):
-            location = self.__playlist.media(index.row()).canonicalUrl()
-            return self.urlSongMappings[location].tags['title'][0]
-        elif index.column() == self.HEADERS.index('artist'):
-            location = self.__playlist.media(index.row()).canonicalUrl()
-            return self.urlSongMappings[location].tags['artist'][0]
-        elif index.column() == self.HEADERS.index('album'):
-            location = self.__playlist.media(index.row()).canonicalUrl()
-            return self.urlSongMappings[location].tags['album'][0]
-        elif index.column() == self.HEADERS.index('genre'):
-            location = self.__playlist.media(index.row()).canonicalUrl()
-            return self.urlSongMappings[location].tags['genre'][0]
-        elif index.column() == self.HEADERS.index('file name'):
-            return self.__playlist.media(
-                index.row()).canonicalUrl().toLocalFile()
+        if role == QtCore.Qt.DisplayRole:
+            audioFile = self.__playlist[index.row()]
+            if index.column() == self.__headers.index('LENGTH'):
+                return seconds_to_hms(audioFile.streamInfo()['length'])
+            else:
+                data = self.__headers[index.column()].lower()
+                d = self.__saveMetadataCall(audioFile.get_values([data])[data])
+                return d
+
+        elif role == QtCore.Qt.ToolTipRole:
+            pass
+        elif role == QtCore.Qt.DecorationRole:
+            pass
+        elif role == QtCore.Qt.FontRole:
+            pass
+
+    def __saveMetadataCall(self, call):
+        try:
+            return call[0]
+        except IndexError:
+            return ''
 
     def headerData(self, section, orientation, role=QtCore.Qt.DisplayRole):
         if(role == QtCore.Qt.DisplayRole and
@@ -177,51 +278,6 @@ class PlaylistModel(QtCore.QAbstractTableModel):
         return QtCore.QVariant()
 
 
-
-
-
-
-
-
-
-    # not sure about this qmodelindex thing
-    def index(self, row, column, parent=QtCore.QModelIndex()):
-        if(self.__playlist is not None and not parent.isValid() and
-                row >= 0 and row < self.__playlist.mediaCount() and
-                column >= 0 and column < self.COLUMN_COUNT):
-            return self.createIndex(row, column)
-        else:
-            return QtCore.QModelIndex()
-
-    def parent(self, child):
-        return QtCore.QModelIndex()
-
-
-    def data(self, index, role=QtCore.Qt.DisplayRole):
-        # TODO CHECK DIFFERENT ROLES
-        # if index.isValid() and role == QtCore.Qt.ToolTipRole:
-        #     print("HEYo")
-        #     return "TOOLTIP BIATCH"
-
-        if not index.isValid() or not role == QtCore.Qt.DisplayRole:
-            return QtCore.QVariant()
-
-        if index.column() == self.HEADERS.index('title'):
-            location = self.__playlist.media(index.row()).canonicalUrl()
-            return self.urlSongMappings[location].tags['title'][0]
-        elif index.column() == self.HEADERS.index('artist'):
-            location = self.__playlist.media(index.row()).canonicalUrl()
-            return self.urlSongMappings[location].tags['artist'][0]
-        elif index.column() == self.HEADERS.index('album'):
-            location = self.__playlist.media(index.row()).canonicalUrl()
-            return self.urlSongMappings[location].tags['album'][0]
-        elif index.column() == self.HEADERS.index('genre'):
-            location = self.__playlist.media(index.row()).canonicalUrl()
-            return self.urlSongMappings[location].tags['genre'][0]
-        elif index.column() == self.HEADERS.index('file name'):
-            return self.__playlist.media(
-                index.row()).canonicalUrl().toLocalFile()
-
     # IF I WANT IT TO BE IDITABLE
     # def setData(self, index, value, role=QtCore.Qt.EditRole):
     #     pass
@@ -230,62 +286,43 @@ class PlaylistModel(QtCore.QAbstractTableModel):
         if not index.isValid():
             return QtCore.Qt.ItemIsEnabled
 
-        return QtCore.QAbstractTableModel.flags(self, index) | QtCore.Qt.ItemIsEditable
+        return super(PlaylistModel, self).flags(index) | \
+            QtCore.Qt.ItemIsEnabled
 
-    def insertRow(self, row, parent=QtCore.QModelIndex()):
-        pass
+    # def insertRow(self, row, parent=QtCore.QModelIndex()):
+    #     self.beginInsertRows(parent, row, row + 1)
+    #     self.__playlist.insert(None, row)
+    #     self.endInsertRows()
 
-    def insertRows(self, row, count, parent=QtCore.QModelIndex()):
-        pass
+    #     return True
 
-    def removeRow(self, row, parent=QtCore.QModelIndex()):
-        pass
+    # def removeRow(self, row, parent=QtCore.QModelIndex()):
+    #     self.beginRemoveRows(parent, row, row + 1)
+    #     del self.__playlist[row]
+    #     self.endRemoveRows()
 
-    def removeRows(self, row, count, parent=QtCore.QModelIndex()):
-        pass
+    #     return True
 
-    def setPlaylist(self, playlist):
-        self.beginResetModel()
+    # def insertRows(self, row, count, parent=QtCore.QModelIndex()):
+    #     self.beginInsertRows(parent, row, row + count - 1)
+    #     self.__playlist.insert(None, row)
+    #     self.endInsertRows()
 
-        self.__playlist = playlist
+    #     return True
 
-        if self.__playlist is not None:
-            self.__playlist.mediaAboutToBeInserted.connect(self.beginInsertItems)
-            self.__playlist.mediaInserted.connect(self.endInsertItems)
-            self.__playlist.mediaAboutToBeRemoved.connect(self.beginRemoveItems)
-            self.__playlist.mediaRemoved.connect(self.endRemoveItems)
-            self.__playlist.mediaChanged.connect(self.changeItems)
+    # def removeRows(self, row, count, parent=QtCore.QModelIndex()):
+    #     pass
 
-        self.endResetModel()
-
-    def beginInsertItems(self, start, end):
-        self.beginInsertRows(QtCore.QModelIndex(), start, end)
-
-    def endInsertItems(self):
+    def insertMedia(self, row, mediaFiles=[], parent=QtCore.QModelIndex()):
+        self.beginInsertRows(parent, row, row + len(mediaFiles) - 1)
+        currentRow = row
+        for file in mediaFiles:
+            self.__playlist.insert(currentRow, file)
+            currentRow += 1
         self.endInsertRows()
 
-    def beginRemoveItems(self, start, end):
-        self.beginRemoveRows(QtCore.QModelIndex(), start, end)
-
-    def endRemoveItems(self):
+    def removeMedia(self, row, count, parent=QtCore.QModelIndex()):
+        self.beginRemoveRows(parent, row, row + 1)
+        for i in range(row, count):
+            del self.__playlist[i]
         self.endRemoveRows()
-
-    def changeItems(self, start, end):
-        self.dataChanged.emit(self.index(start, 0),
-                              self.index(end, self.COLUMN_COUNT))
-
-    def addToPlaylist(self, songs):
-        new_mappings = {}
-        for song in songs:
-            fileInfo = QtCore.QFileInfo(song.url)
-            if fileInfo.exists():
-                url = QtCore.QUrl.fromLocalFile(fileInfo.absoluteFilePath())
-                if fileInfo.suffix().lower() == 'mp3':
-                    self.__playlist.addMedia(QMediaContent(url))
-                    new_mappings[url] = song
-            else:
-                url = QtCore.QUrl(song.url)
-                if url.isValid():
-                    self.__playlist.addMedia(QMediaContent(url))
-                    new_mappings[url] = song
-        self.urlSongMappings = new_mappings
