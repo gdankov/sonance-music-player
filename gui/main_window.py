@@ -109,6 +109,7 @@ class MainWindow(QMainWindow):
         self.stackWidget = StackedWidget()
         self.stackWidget.widgetDoubleClicked.connect(
             self.audioPlayer.setPlaylist)
+        self.stackWidget.songRemoved.connect(self.audioPlayer.removeSong)
         self._setLeftSideBar()
 
     def _setLeftSideBar(self):

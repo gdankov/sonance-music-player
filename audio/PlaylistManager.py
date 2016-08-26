@@ -20,6 +20,8 @@ class PlaylistManger(QObject):
 
     updatedLibraryPlaylist = pyqtSignal(UUID, list)
 
+    songRemoved = pyqtSignal(UUID, int)
+
     playlistRemoved = pyqtSignal(UUID)
 
     def __init__(self, parent=None):
@@ -140,6 +142,10 @@ class PlaylistManger(QObject):
                 return title, artist, cover
         return title, artist, cover
 
+    def removeSong(self, uuid, row):
+        playlist = self.findPlaylist(uuid)
+        playlist.remove_song(row)
+
     def __safeMetadataCall(self, call):
         try:
             return call[0]
@@ -151,6 +157,12 @@ class PlaylistManger(QObject):
 
     def currentInternalPlaylistShuffled(self):
         return self._currentPlaylist.internalPlaylist.shuffle()
+
+    def findPlaylist(self, uuid):
+        if self.isLibraryPlaylist(uuid):
+            return self.getLibraryPlaylist()
+        else:
+            return self.getCustomPlaylist(uuid)
 
     def getCurrentPlaylistUuid(self):
         return self._currentPlaylist.getUuid()

@@ -82,6 +82,9 @@ class AudioPlayer(QObject):
     def addSongsToCustomPlaylist(self, uuid, urls=[]):
         self.__playlistManager.addSongsToCustomPlaylist(uuid, urls)
 
+    def removeSong(self, uuid, row):
+        self.__playlistManager.removeSong(uuid, row)
+
     def setPlaylist(self, uuid, index=0):
         if (self.__player.playlist() and
                 self.__playlistManager.isCurrentPlaylist(uuid)):

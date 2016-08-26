@@ -293,7 +293,7 @@ class PlaylistModel(QtCore.QAbstractTableModel):
 
     def removeMedia(self, row, count, parent=QtCore.QModelIndex()):
         self.beginRemoveRows(parent, row, row + 1)
-        for i in range(row, count):
+        for i in range(row, row + count):
             del self.__playlist[i]
         self.endRemoveRows()
 

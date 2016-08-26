@@ -231,6 +231,8 @@ class StackedWidget(QStackedWidget):
 
     widgetDoubleClicked = QtCore.pyqtSignal(UUID, int)
 
+    songRemoved = QtCore.pyqtSignal(UUID, int)
+
     def __init__(self, parent=None):
         super(StackedWidget, self).__init__(parent)
 
@@ -296,6 +298,10 @@ class StackedWidget(QStackedWidget):
         self.editAct.setStatusTip("Edit this file's metadata")
         self.editAct.triggered.connect(self.editData)
 
+        self.removeAct = QAction("Remove From Playlist", self)
+        self.removeAct.setStatusTip("Remove file from this Playlist")
+        self.removeAct.triggered.connect(self.removeEntry)
+
     @QtCore.pyqtSlot(UUID, list)
     def updatePlaylist(self, uuid, mediaFiles):
         widget = self.playlistMappings[uuid]
@@ -322,7 +328,9 @@ class StackedWidget(QStackedWidget):
         row = self.currentWidget().indexAt(pos).row()
         song = self.currentWidget().model().getDataAtRow(row)
         self.editAct.setData(song)
+        self.removeAct.setData((self.currentWidget().model().getUuid(), row))
         menu.addAction(self.editAct)
+        menu.addAction(self.removeAct)
         menu.popup(self.mapToGlobal(pos))
 
     def editData(self):
@@ -338,3 +346,9 @@ class StackedWidget(QStackedWidget):
         if dialogCode == QDialog.Rejected:
             return
 
+    def removeEntry(self):
+        uuid, row = self.removeAct.data()
+        widget = self.playlistMappings[uuid]
+        model = widget.model()
+        model.removeMedia(row, 1)
+        self.songRemoved.emit(uuid, row)

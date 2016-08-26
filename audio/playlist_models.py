@@ -92,22 +92,19 @@ class DirectoryPlaylist(Playlist):
         if row < 0 or row > self.song_count() - 1:
             return None
 
+        if self._qPlaylist.currentIndex() == row:
+            if row < self.song_count():
+                self._qPlaylist.setCurrentIndex(row + 1)
+            else:
+                self._qPlaylist.setCurrentIndex(row - 1)
+
         removed = self._qPlaylist.removeMedia(row)
         if not removed:
-            pass
+            return
 
         del self._tracks[row]
         url = self.get_song_abs_path(row)
         self._added_song_urls.discard(url)
-
-    # def remove_songs(self, start, end):
-    #     if row < 0 or row > self.song_count() - 1:
-    #         return None
-
-
-    #     url = self.get_song_abs_path(row)
-    #     removed = 
-    #     del self._tracks[row]
 
     def add_directory(self, directory):
         if directory not in self._directories_urls:
@@ -208,7 +205,7 @@ class DirectoryPlaylist(Playlist):
         if row < 0 or row > self.song_count() - 1:
             return None
 
-        return self._tracks[row].get_song_filepath()
+        return self._tracks[row].get_abs_path()
 
     def getDirectories(self):
         return self._directories_urls
