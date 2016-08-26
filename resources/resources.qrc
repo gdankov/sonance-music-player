@@ -8,5 +8,12 @@
     <file>left_sidebar_icons/trash_white_24x24.png</file>
     <file>left_sidebar_icons/music.png</file>
     <file>left_sidebar_icons/playlist_64x64.png</file>
+    <file>playlist_controls_icons/play.png</file>
+    <file>playlist_controls_icons/pause.png</file>
+    <file>playlist_controls_icons/next.png</file>
+    <file>playlist_controls_icons/previous.png</file>
+    <file>playlist_controls_icons/stop.png</file>
+    <file>playlist_controls_icons/shuffle.png</file>
+    <file>playlist_controls_icons/loop.png</file>
 </qresource>
 </RCC>

@@ -5,6 +5,8 @@ from PyQt5.QtGui import QIcon, QFont
 from .helper_struct import TreeNode
 from util import seconds_to_hms
 
+from util import DEFAULT_VIEWS_COUNT
+
 
 class TreeModel(QtCore.QAbstractItemModel):
 
@@ -107,8 +109,6 @@ class TreeModel(QtCore.QAbstractItemModel):
         elif role == QtCore.Qt.FontRole:
             font = QFont("Times", 15)
             return font
-        # elif role == QtCore.Qt.EditRole:
-        #     return "ale"
 
     def setData(self, index, value, role=QtCore.Qt.EditRole):
         if not role == QtCore.Qt.EditRole:
@@ -130,7 +130,7 @@ class TreeModel(QtCore.QAbstractItemModel):
 
         if index.internalPointer() in self.__root.children():
             return QtCore.Qt.ItemIsEnabled
-        elif index.parent().isValid() and index.parent().row() == 1:            #FIXIT should not be hardcoded
+        elif index.parent().isValid() and index.parent().row() == DEFAULT_VIEWS_COUNT:
             return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsEditable | \
                 QtCore.Qt.ItemNeverHasChildren | QtCore.Qt.ItemIsSelectable
         return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable | \
@@ -216,10 +216,13 @@ class PlaylistModel(QtCore.QAbstractTableModel):
     def getUuid(self):
         return self.__uuid
 
+    def getDataAtRow(self, row):
+        return self.__playlist[row]
+
     # for debugging
     def printElems(self):
         for elem in self.__playlist:
-            print(elem)
+            print(elem.get_title())
 
     def columnCount(self, parent=QtCore.QModelIndex()):
         return len(self.__headers) if not parent.isValid() else 0
@@ -241,10 +244,6 @@ class PlaylistModel(QtCore.QAbstractTableModel):
         return QtCore.QModelIndex()
 
     def data(self, index, role=QtCore.Qt.DisplayRole):
-        # TODO CHECK DIFFERENT ROLES
-        # if index.isValid() and role == QtCore.Qt.ToolTipRole:
-        #     print("HEYo")
-        #     return "TOOLTIP BIATCH"
         if not index.isValid():
             return QtCore.QVariant()
 
@@ -277,41 +276,12 @@ class PlaylistModel(QtCore.QAbstractTableModel):
 
         return QtCore.QVariant()
 
-
-    # IF I WANT IT TO BE IDITABLE
-    # def setData(self, index, value, role=QtCore.Qt.EditRole):
-    #     pass
-
     def flags(self, index):
         if not index.isValid():
             return QtCore.Qt.ItemIsEnabled
 
         return super(PlaylistModel, self).flags(index) | \
             QtCore.Qt.ItemIsEnabled
-
-    # def insertRow(self, row, parent=QtCore.QModelIndex()):
-    #     self.beginInsertRows(parent, row, row + 1)
-    #     self.__playlist.insert(None, row)
-    #     self.endInsertRows()
-
-    #     return True
-
-    # def removeRow(self, row, parent=QtCore.QModelIndex()):
-    #     self.beginRemoveRows(parent, row, row + 1)
-    #     del self.__playlist[row]
-    #     self.endRemoveRows()
-
-    #     return True
-
-    # def insertRows(self, row, count, parent=QtCore.QModelIndex()):
-    #     self.beginInsertRows(parent, row, row + count - 1)
-    #     self.__playlist.insert(None, row)
-    #     self.endInsertRows()
-
-    #     return True
-
-    # def removeRows(self, row, count, parent=QtCore.QModelIndex()):
-    #     pass
 
     def insertMedia(self, row, mediaFiles=[], parent=QtCore.QModelIndex()):
         self.beginInsertRows(parent, row, row + len(mediaFiles) - 1)
@@ -326,3 +296,8 @@ class PlaylistModel(QtCore.QAbstractTableModel):
         for i in range(row, count):
             del self.__playlist[i]
         self.endRemoveRows()
+
+    def reset(self):
+        self.beginResetModel()
+        self.__playlist = []
+        self.endResetModel()

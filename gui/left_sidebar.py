@@ -18,11 +18,11 @@ class LeftSideBar(QWidget):
 
     treeViewSelectionChanged = pyqtSignal(QModelIndex, QModelIndex)
     treeViewDoubleClicked = pyqtSignal(QModelIndex)
-    
+
     addPlaylistRequested = pyqtSignal()
     removePlaylistRequested = pyqtSignal(UUID)
     addToPlaylistRequested = pyqtSignal(UUID)
-    
+
     playlistAdded = pyqtSignal(UUID)
     playlistRenamed = pyqtSignal(UUID, str)
 
@@ -47,10 +47,6 @@ class LeftSideBar(QWidget):
 
         self.treeModel.addTopLevelItems(self._tree_items.keys())
 
-
-        # for k, v in self._tree_items.items():
-        #     self.treeModel.addToModel(k, v)
-
         self.leftBarView = QTreeView()
         self.leftBarView.setModel(self.treeModel)
         self.leftBarView.setHeaderHidden(True)
@@ -65,10 +61,6 @@ class LeftSideBar(QWidget):
 
         self.leftBarView.selectionModel().currentRowChanged.connect(
             lambda c, p: self.treeViewSelectionChanged.emit(c, p))
-
-
-        # self.leftBarView.selectionModel().currentRowChanged.connect(
-        #     lambda c, p: print('selected {} : {}'.format(c.internalPointer().itemData(), c.internalPointer().valueData())))
 
         self.leftBarView.selectionModel().setCurrentIndex(
             self.leftBarView.model().index(
@@ -99,11 +91,6 @@ class LeftSideBar(QWidget):
     def model(self):
         return self.treeModel
 
-    def _onCurrentChanged(self, current, previous):
-        print("SELECTION CHAINGED")
-        print(current.row(), current.column())
-
-
     def _setAlbumCoverBox(self):
         self.albumCoverBox = CoverArtBox()
 
@@ -111,8 +98,8 @@ class LeftSideBar(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(0)
-        self.layout.addWidget(self.leftBarView, stretch=0)
-        self.layout.addWidget(self.albumCoverBox, stretch=0)
+        self.layout.addWidget(self.leftBarView)
+        self.layout.addWidget(self.albumCoverBox)
         self.setLayout(self.layout)
 
     @QtCore.pyqtSlot(str, str, bytes)

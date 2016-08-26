@@ -32,14 +32,14 @@ class VorbisComment(MediaFile):
 
     def _get_title(self, mutagen_file):
         try:
-            text_frame = mutagen_file.tags[self.R_VORBIS_MAPPINGS['title']][0]
+            text_frame = mutagen_file.tags[self.R_VORBIS_MAPPINGS['title']]
         except IndexError:
             return ''
         return text_frame
 
     def _get_album(self, mutagen_file):
         try:
-            album_frame = mutagen_file.tags[self.R_VORBIS_MAPPINGS['album']][0]
+            album_frame = mutagen_file.tags[self.R_VORBIS_MAPPINGS['album']]
         except IndexError:
             return ''
         return album_frame
@@ -47,7 +47,7 @@ class VorbisComment(MediaFile):
     def _get_artist(self, mutagen_file):
         try:
             artist_frame = mutagen_file.tags[
-                self.R_VORBIS_MAPPINGS['artist']][0]
+                self.R_VORBIS_MAPPINGS['artist']]
         except IndexError:
             return ''
         return artist_frame
@@ -90,8 +90,7 @@ class VorbisComment(MediaFile):
         try:
             key_tag = self.R_VORBIS_MAPPINGS[key]
         except KeyError:
-            # key_tag = key
-            return False  # FOR NOW
+            key_tag = key
 
         d = {key_tag: value}
         self._mutagen_file.tags.update(d)

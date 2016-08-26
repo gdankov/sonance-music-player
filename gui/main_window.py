@@ -16,23 +16,14 @@ from .widgets import PlayerControlsWidget, StackedWidget
 from .delegates import LeftSideBarDelegate
 from .models import TreeModel, PlaylistModel
 from .left_sidebar import LeftSideBar
+from .dialogs import SettingsDialog
 from collections import OrderedDict
-
-
-LEFT_SIDEBAR_MENU_ITEMS = OrderedDict(
-    [  # ('MAIN', ['Home', 'Settings']),
-    ('LIBRARY', ['Songs', 'Artists', 'Albums', 'Genres']),
-    ('PLAYLISTS', [])])
-
+from .util import DEFAULT_VIEWS, DEFAULT_VIEWS_COUNT, LEFT_SIDEBAR_MENU_ITEMS
 
 
 class MainWindow(QMainWindow):
 
     _tree_items = LEFT_SIDEBAR_MENU_ITEMS
-
-    DEFAULT_VIEWS = LEFT_SIDEBAR_MENU_ITEMS['LIBRARY']
-
-    DEFAULT_VIEWS_COUNT = len(DEFAULT_VIEWS)
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
@@ -41,23 +32,21 @@ class MainWindow(QMainWindow):
 
         self.audioPlayer.songPositionChanged.connect(self._changeSongTimestamp)
         self.audioPlayer.songDurationChanged.connect(self._setSongDuration)
-        #self.audioPlayer.stateChanged.connect()
-        self.audioPlayer.playlistChanged.connect(self._playlistIndexChanged)
 
-
-        self._setMenus()
-        self._setStatusBar()
         self._setActions()
+        self._setMenus()
 
         self._setPlayerControls()
         self._setCentralArea()
         self.renderUI()
-        
+
+        self.audioPlayer.stateChanged.connect(
+            self.audioPlayerControls.onStateChange)
         self.audioPlayer.currentSongChanged.connect(
             self.leftSidebar.changeCoverArtBoxInformation)
+        self.audioPlayer.currentSelectionChanged.connect(
+            self.stackWidget.setWidgetIndex)
 
-        # self.audioPlayer.customPlaylistCreated.connect(
-        #     self.stackWidget.createCustomPlaylistView)
         self.audioPlayer.customPlaylistCreated.connect(
             self.leftSidebar.addPlaylistEntry)
 
@@ -74,65 +63,53 @@ class MainWindow(QMainWindow):
         self.audioPlayer.createLibraryPlaylist()
         self.audioPlayer.addedToLibraryPlaylist.connect(
             self.stackWidget.appendToPlaylist)
+
         self.audioPlayer.addedToCustomPlaylist.connect(
             self.stackWidget.appendToPlaylist)
 
+        self.audioPlayer.updatedLibraryPlaylist.connect(
+            self.stackWidget.updatePlaylist)
 
-        self.restoreState()  # SHOUlD IT BE LAST?
+        self.restoreSettings()  # SHOUlD IT BE LAST?
 
     def _setMenus(self):
-        pass
-
-    def _setStatusBar(self):
-        self.statusBar().showMessage("status_bar")
+        self.menubar = self.menuBar()
+        self.fileMenu = self.menubar.addMenu('&Tools')
+        self.fileMenu.addAction(self.openPreferencesAction)
 
     def _setActions(self):
-        openFile = QAction('Open', self)
-        openFile.setShortcut('Ctrl+O')
-        openFile.setStatusTip('Open new directory')
-        openFile.triggered.connect(self.choose_directory)
+        self.openPreferencesAction = QAction('Preferences', self)
+        self.openPreferencesAction.triggered.connect(self._openPreferences)
 
-        menubar = self.menuBar()
-        fileMenu = menubar.addMenu('&File')
-        fileMenu.addAction(openFile)
+    def _openPreferences(self):
+        settingsDialog = SettingsDialog()
+        dialogCode = settingsDialog.exec_()
+        if dialogCode == QDialog.Accepted:
+            settingsDialog.saveSettings()
+            self.audioPlayer.updateLibraryPlaylist(
+                settingsDialog.currentDirectories)
+        if dialogCode == QDialog.Rejected:
+            return
 
     def _setPlayerControls(self):
         self.audioPlayerControls = PlayerControlsWidget(30)
-        self.audioPlayerControls.play.connect(self._play)
-        self.audioPlayerControls.pause.connect(self._pause)
-        self.audioPlayerControls.previousSong.connect(self._previous)
-        self.audioPlayerControls.nextSong.connect(self._next)
-        self.audioPlayerControls.volumeControl.connect(self._changeVolume)
-        self.audioPlayerControls.songTimestamp.connect(self._setTimestamp)
+        self.audioPlayerControls.play.connect(self.audioPlayer.play)
+        self.audioPlayerControls.pause.connect(self.audioPlayer.pause)
+        self.audioPlayerControls.previousSong.connect(
+            lambda: self.audioPlayer.previousEnhanced(5000))
+        self.audioPlayerControls.nextSong.connect(self.audioPlayer.next)
+        self.audioPlayerControls.volumeControl.connect(
+            self.audioPlayer.setVolume)
+        self.audioPlayerControls.songTimestamp.connect(
+            self.audioPlayer.setPosition)
         self.audioPlayerControls.setSizePolicy(QSizePolicy.Preferred,
-                                          QSizePolicy.Fixed)
-
-    def _play(self):
-        self.audioPlayer.play()
-
-    def _pause(self):
-        self.audioPlayer.pause()
-
-    def _previous(self):
-        self.audioPlayer.previousEnhanced(5000)
-
-    def _next(self):
-        self.audioPlayer.next()
-
-    def _changeVolume(self, value):
-        self.audioPlayer.setVolume(value)
-
-    def _setTimestamp(self, milliseconds):
-        # if not self.songDurationSlider.isSliderDown():
-        self.audioPlayer.setPosition(milliseconds)
+                                               QSizePolicy.Fixed)
 
     def _setCentralArea(self):
         self.stackWidget = StackedWidget()
         self.stackWidget.widgetDoubleClicked.connect(
             self.audioPlayer.setPlaylist)
         self._setLeftSideBar()
-
-
 
     def _setLeftSideBar(self):
         self.leftSidebar = LeftSideBar(self._tree_items)
@@ -151,7 +128,6 @@ class MainWindow(QMainWindow):
             self.stackWidget.createCustomPlaylistView)
 
         self.leftSidebar.removePlaylistRequested.connect(self.audioPlayer.removePlaylist)
-        # TODO connect(and make) cover art box signals
         self.leftSidebar.treeViewDoubleClicked.connect(self._onTreeDoubleClick)
 
     def _onTreeSelectionChange(self, index, index2):
@@ -159,10 +135,10 @@ class MainWindow(QMainWindow):
             return None
 
         if index.parent().isValid() and index.parent().data() == 'LIBRARY':
-            row = self.DEFAULT_VIEWS.index(index.data())
+            row = EFAULT_VIEWS.index(index.data())
             self.stackWidget.setCurrentIndex(row)
         if index.parent().isValid() and index.parent().data() == 'PLAYLISTS':
-            row = index.row() + 1                                   # FIX THIS TOOOOOOOOOOOOOOOOOOOooo
+            row = index.row() + DEFAULT_VIEWS_COUNT
             self.stackWidget.setCurrentIndex(row)
 
     def _onTreeDoubleClick(self, index):
@@ -188,19 +164,20 @@ class MainWindow(QMainWindow):
             self.audioPlayer.addSongsToCustomPlaylist(uuid, files)
 
     def renderUI(self):
-        splitterCentralWidget = QSplitter(orientation=QtCore.Qt.Horizontal)
+        self.splitterCentralWidget = QSplitter(
+            orientation=QtCore.Qt.Horizontal)
 
-        splitterCentralWidget.setContentsMargins(0, 0, 0, 0)
-        splitterCentralWidget.setHandleWidth(2)
-        splitterCentralWidget.addWidget(self.leftSidebar)
-        splitterCentralWidget.addWidget(self.stackWidget)
-        splitterCentralWidget.setChildrenCollapsible(False)  # make it an option
+        self.splitterCentralWidget.setContentsMargins(0, 0, 0, 0)
+        self.splitterCentralWidget.setHandleWidth(2)
+        self.splitterCentralWidget.addWidget(self.leftSidebar)
+        self.splitterCentralWidget.addWidget(self.stackWidget)
+        self.splitterCentralWidget.setChildrenCollapsible(False)
 
         self.centralWidget = QWidget()
         centralLayout = QVBoxLayout()
         centralLayout.setContentsMargins(0, 0, 0, 0)
         centralLayout.setSpacing(0)
-        centralLayout.addWidget(splitterCentralWidget)
+        centralLayout.addWidget(self.splitterCentralWidget)
         centralLayout.addWidget(self.audioPlayerControls)
 
         self.centralWidget.setLayout(centralLayout)
@@ -213,11 +190,6 @@ class MainWindow(QMainWindow):
 
     def _setSongDuration(self, duration):
         self.audioPlayerControls.setSongDuration(duration)
-
-    def _playlistIndexChanged(self, newIndex):
-        # self.playlistView.setCurrentIndex(
-        #     self.playlistModel.index(newIndex, 0))
-        pass
 
     def choose_directory(self):
         fileDialog = QFileDialog(self)
@@ -240,10 +212,6 @@ class MainWindow(QMainWindow):
         fileDialog.setFileMode(QFileDialog.ExistingFiles)
         fileDialog.setViewMode(QFileDialog.Detail)
         fileDialog.setWindowTitle("Choose media files")
-        #supportedMimeTypes = player.supportedMimeTypes()
-        # if not supportedMimeTypes.isEmpty():
-        #     supportedMimeTypes.append("audio/x-m3u")
-        #     fileDialog.setMimeTypeFilters(supportedMimeTypes)
         try:
             fileDialog.setDirectory(QtCore.QStandardPaths.standardLocations(
                                     QtCore.QStandardPaths.MusicLocation)[0])
@@ -253,44 +221,9 @@ class MainWindow(QMainWindow):
         if fileDialog.exec_() == QDialog.Accepted:
             return fileDialog.selectedFiles()
 
-
-    def singleClickedTest(self, index):
-        # TODO stuff maybe?!
-        #print(self.playlistView.selectionModel().currentIndex().row())
-        pass
-
-    def doubleClickedPlayPause(self, index):
-        currentIndex = self.audioPlayer.playlistCurrentIndex()
-        newIndex = index.row()
-
-        if currentIndex == newIndex:
-            if self.audioPlayer.getState() == QMediaPlayer.StoppedState:
-                self._play()
-            elif self.audioPlayer.getState() == QMediaPlayer.PlayingState:
-                self._play()
-            elif self.audioPlayer.getState() == QMediaPlayer.PausedState:
-                self._play()
-        else:
-            self.audioPlayer.setCurrentPlaylistIndex(newIndex)
-            self._play()
-
-    # Not working
-    def keyPressEvent(self, e):
-        if e.key() == QtCore.Qt.Key_Escape:
-            self.close()
-        elif e.key() == QtCore.Qt.Key_Space:
-            if self.audioPlayer.state() == QMediaPlayer.PlayingState:
-                self.audioPlayer.pause()
-            elif self.audioPlayer.state() == QMediaPlayer.PausedState:
-                self.audioPlayer.play()
-        elif e.key() == QtCore.Qt.Key_Enter:
-            newIndex = self.playlist.currentIndex()
-            self.playlist.setCurrentIndex(newIndex)
-            self.audioPlayer.play()
-
     def closeEvent(self, event):
         if self.__promptExit():
-            self.saveState()
+            self.saveWindowState()
             event.accept()
         else:
             event.ignore()
@@ -304,48 +237,37 @@ class MainWindow(QMainWindow):
         elif ret == QMessageBox.No:
             return False
 
-    def saveState(self):
-        settings = QtCore.QSettings(QtCore.QCoreApplication.organizationName(),
-                                    QtCore.QCoreApplication.applicationName())
+    def saveWindowState(self):
+        settings = QtCore.QSettings(
+            QtCore.QSettings.IniFormat, QtCore.QSettings.UserScope,
+            QtCore.QCoreApplication.organizationName(),
+            QtCore.QCoreApplication.applicationName())
 
-        # settings.setValue("main_window/position", self.pos())   # and maybe change to ini for all platforms and setFallbacksEnabled(false)
-        # settings.setValue("main_window/size", self.size())
-        # settings.setValue("main_window/splitterSizes",
-        #                   self.centralArea.saveState())
-        self.audioPlayer.saveState()
+        settings.setValue("main_window/position", self.pos())
+        settings.setValue("main_window/size", self.size())
+        settings.setValue("main_window/splitterSizes",
+                          self.splitterCentralWidget.saveState())
+        settings.setValue("main_window/state", self.saveState())
 
+        self.audioPlayerControls.saveSettings()
 
-    def restoreState(self):
-        settings = QtCore.QSettings(QtCore.QCoreApplication.organizationName(),
-                                    QtCore.QCoreApplication.applicationName())
+    def restoreSettings(self):
+        settings = QtCore.QSettings(
+            QtCore.QSettings.IniFormat, QtCore.QSettings.UserScope,
+            QtCore.QCoreApplication.organizationName(),
+            QtCore.QCoreApplication.applicationName())
 
-        # pos = settings.value("main_window/position", QtCore.QPoint(200, 200))
-        # size = settings.value("main_window/size", QtCore.QSize(400, 400))
-        # self.resize(size)   # not working as expected this part
-        # self.move(pos)      # and this probably
+        state = settings.value('main_window/state')
+        if state:
+            self.restoreState(state)
 
-        # spliterSizes = settings.value("main_window/splitterSizes")
-        # self.centralArea.restoreState(spliterSizes)
+        pos = settings.value("main_window/position", QtCore.QPoint(150, 150))
+        size = settings.value("main_window/size", QtCore.QSize(1200, 300))
+        self.resize(size)
+        self.move(pos)
 
-        self.audioPlayer.restoreState()
+        spliterSizes = settings.value("main_window/splitterSizes")
+        if spliterSizes:
+            self.splitterCentralWidget.restoreState(spliterSizes)
 
-    def contextMenuEvent(self, event):
-        print("context menu event")
-        event.ignore()
-
-    def about(self):
-        # QMessageBox::about(this, tr("About Application"),
-        #         tr("The <b>Application</b> example demonstrates how to "
-        #            "write modern GUI applications using Qt, with a menu bar, "
-        #            "toolbars, and a status bar."));
-        pass
-
-
-# if __name__ == '__main__':
-#     app = QApplication(sys.argv)
-
-#     player = MainWindow()
-#     player.show()
-
-#     sys.exit(app.exec_())
-    
+        self.audioPlayerControls.restoreSettings()

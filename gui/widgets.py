@@ -7,15 +7,16 @@ from PyQt5.QtWidgets import(QTableView, QHBoxLayout, QVBoxLayout, QWidget,
                             QGridLayout, QPushButton, QLabel, QFrame,
                             QStackedWidget, QSizePolicy, QSpacerItem,
                             QTreeWidget, QTreeWidgetItem, QListWidget,
-                            QListWidgetItem, QSplitter)
+                            QListWidgetItem, QSplitter, QMenu, QLineEdit,
+                            QDialog, QTextEdit)
 
 from collections import OrderedDict
 from uuid import UUID
 
-from .left_sidebar import LeftSideBar
 from .models import PlaylistModel
-from audio.playlist_models import DirectoryPlaylist
+from .dialogs import MetadataDialog
 
+from .util import DEFAULT_VIEWS, DEFAULT_VIEWS_COUNT
 
 class CustomSlider(QSlider):
     def mousePressEvent(self, event):
@@ -36,25 +37,37 @@ class PlayerControlsWidget(QWidget):
     volumeControl = QtCore.pyqtSignal(int, name='volume control')
     songTimestamp = QtCore.pyqtSignal(int, name='song current timestamp')
 
-    def __init__(self, defaultVolume, parent=None):
+    playbackModeChanged = QtCore.pyqtSignal(int)
+    shuffleModeChanged = QtCore.pyqtSignal(int)
+
+    DEFAULT_VOLUME = 40
+
+    def __init__(self, volume, state=QMediaPlayer.StoppedState, parent=None):
         super(PlayerControlsWidget, self).__init__(parent)
-        self.playerState = QMediaPlayer.StoppedState
-        self.defaultVolume = defaultVolume
+        self.playerState = state
+        self.volume = volume
 
         self.playButton = QToolButton(self)
-        self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self.playButton.setIcon(
+            QtGui.QIcon(":/playlist_controls_icons/play.png"))
+        self.playButton.setAutoRaise(True)
+        self.playButton.setFocusPolicy(QtCore.Qt.NoFocus)
 
         self.nextButton = QToolButton(self)
         self.nextButton.setIcon(
-            self.style().standardIcon(QStyle.SP_MediaSkipForward))
+            QtGui.QIcon(":/playlist_controls_icons/next.png"))
+        self.nextButton.setAutoRaise(True)
+        self.nextButton.setFocusPolicy(QtCore.Qt.NoFocus)
 
         self.previousButton = QToolButton(self)
         self.previousButton.setIcon(
-            self.style().standardIcon(QStyle.SP_MediaSkipBackward))
+            QtGui.QIcon(":/playlist_controls_icons/previous.png"))
+        self.previousButton.setAutoRaise(True)
+        self.previousButton.setFocusPolicy(QtCore.Qt.NoFocus)
 
-        self.volumeSlider = CustomSlider(QtCore.Qt.Horizontal, self)
+        self.volumeSlider = CustomSlider(QtCore.Qt.Horizontal)
         self.volumeSlider.setRange(0, 100)
-        self.volumeSlider.setValue(self.defaultVolume)
+        self.volumeSlider.setValue(self.volume)
 
         self.durationLabel = QLabel()
         self.durationLabel.setText("00:00")
@@ -62,20 +75,15 @@ class PlayerControlsWidget(QWidget):
         self.currentTimestampLabel.setText("00:00")
 
         self.songTimestampSlider = CustomSlider(QtCore.Qt.Horizontal)
-        #self.songTimestampSlider.setRange(0, self.player.getDuration())
         self.songTimestampSlider.setTracking(False)
 
-
-
-
-        self.playButton.clicked.connect(self._onPlay)
+        self.playButton.clicked.connect(self._onPlayPause)
         self.nextButton.clicked.connect(self._onNext)
         self.previousButton.clicked.connect(self._onPrevious)
 
         self.volumeSlider.sliderMoved.connect(self._changeVolume)
         self.volumeSlider.valueChanged.connect(self._changeVolume)
 
-        # self.songTimestampSlider.sliderMoved.connect(self.test)
         self.songTimestampSlider.valueChanged.connect(self._changeTimeStamp)
 
         self.initGUI()
@@ -91,6 +99,28 @@ class PlayerControlsWidget(QWidget):
         hLayout.addWidget(self.durationLabel)
         self.setLayout(hLayout)
 
+    def _onLoopButtonToggle(self):
+        if self.loopButtonState == QMediaPlaylist.Sequential:
+            self.loopButtonState = QMediaPlaylist.Loop
+            self.loopButton.setToolTip("Current: Playlist Loop")
+        elif self.loopButtonState == QMediaPlaylist.Loop:
+            self.loopButtonState = QMediaPlaylist.CurrentItemInLoop
+            self.loopButton.setToolTip("Current: Current Song Loop")
+        else:
+            self.loopButtonState = QMediaPlaylist.Sequential
+            self.loopButton.setToolTip("Current: Disabled")
+
+        self.playbackModeChanged.emit(self.loopButtonState)
+
+    def _onShuffleButtonToggle(self, toggled):
+        if toggled:
+            self.playbackModeChanged.emit(QMediaPlaylist.Random)
+            self.shuffleButton.setToolTip("Current: Enabled")
+        else:
+            self.playbackModeChanged.emit(QMediaPlaylist.Sequential)
+            self.shuffleButton.setToolTip("Current: Disabled")
+
+
     def setSongDuration(self, duration):
         self.songTimestampSlider.setMaximum(duration)
         self._updateDurationInfo(duration)
@@ -98,7 +128,6 @@ class PlayerControlsWidget(QWidget):
     def _updateDurationInfo(self, duration):
         self.setDurationLabel(duration)
 
-    # consider exception
     def setDurationLabel(self, duration):
         if not duration:
             return
@@ -133,7 +162,7 @@ class PlayerControlsWidget(QWidget):
         return timestamp
 
     @QtCore.pyqtSlot()
-    def _onPlay(self):
+    def _onPlayPause(self):
         if self.playerState in (QMediaPlayer.StoppedState,
                                 QMediaPlayer.PausedState):
             self.playerState = QMediaPlayer.PlayingState
@@ -158,18 +187,43 @@ class PlayerControlsWidget(QWidget):
     def _changeTimeStamp(self, value):
         self.songTimestamp.emit(value)
 
+    @QtCore.pyqtSlot(int)
+    def onStateChange(self, state):
+        if state == QMediaPlayer.PlayingState:
+            self.playerState = state
+            self.playButton.setIcon(
+                QtGui.QIcon(":/playlist_controls_icons/pause.png"))
+        elif state == QMediaPlayer.StoppedState:
+            self.playerState = state
+            self.playButton.setIcon(
+                QtGui.QIcon(":/playlist_controls_icons/play.png"))
+        elif state == QMediaPlayer.PausedState:
+            self.playerState = state
+            self.playButton.setIcon(
+                QtGui.QIcon(":/playlist_controls_icons/play.png"))
 
-LEFT_SIDEBAR_MENU_ITEMS = OrderedDict(
-    [  # ('MAIN', ['Home', 'Settings']),
-    ('LIBRARY', ['Songs', 'Artists', 'Albums', 'Genres']),
-    ('PLAYLISTS', [])])
+    def saveSettings(self):
+        settings = QtCore.QSettings(
+            QtCore.QSettings.IniFormat, QtCore.QSettings.UserScope,
+            QtCore.QCoreApplication.organizationName(),
+            QtCore.QCoreApplication.applicationName())
 
-DEFAULT_VIEWS = LEFT_SIDEBAR_MENU_ITEMS['LIBRARY']
+        settings.setValue("player_controls/volume", self.volumeSlider.value())
+
+    def restoreSettings(self):
+        settings = QtCore.QSettings(
+            QtCore.QSettings.IniFormat, QtCore.QSettings.UserScope,
+            QtCore.QCoreApplication.organizationName(),
+            QtCore.QCoreApplication.applicationName())
+
+        volume = settings.value("player_controls/volume", type=int)
+        if not volume:
+            volume = self.DEFAULT_VOLUME
+        self.volumeSlider.setValue(volume)
+
 
 
 class StackedWidget(QStackedWidget):
-
-    DEFAULT_VIEWS_COUNT = len(DEFAULT_VIEWS)
 
     treeViewDataChanged = QtCore.pyqtSignal(str, str, UUID)
     playlistAdded = QtCore.pyqtSignal(str)
@@ -181,43 +235,28 @@ class StackedWidget(QStackedWidget):
         super(StackedWidget, self).__init__(parent)
 
         self.playlistMappings = {}
-
-    # def _onDataChange(self, newValue, oldValue, index):
-    #     playlistUuid = self._getPlaylistUuid(index)
-    #     if playlistUuid:
-    #         self.treeViewDataChanged.emit(newValue, oldValue, playlistUuid)
-
-    # def _getPlaylistUuid(self, index):
-    #     if index.parent().isValid() and index.parent().data() == 'PLAYLISTS':
-    #         row = index.row() + self.DEFAULT_VIEWS_COUNT
-    #         playlistView = self.widget(row)
-    #         uuid = playlistView.model().getPlaylist().getUuid()
-    #         return uuid
+        self.__setContextMenuActions()
 
     def createCustomPlaylistView(self, uuid):
         playlistModel = PlaylistModel(uuid)
 
         playlistView = QTableView(self)
         playlistView.setModel(playlistModel)
+        playlistView.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        playlistView.setSortingEnabled(True)
+        playlistView.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
 
-        # playlistView.setCurrentIndex(p
-        #     playlistModel.index(self.player.playlistCurrentIndex(), 0))
         playlistView.setSelectionBehavior(QAbstractItemView.SelectRows)
         playlistView.setShowGrid(False)
-        # TODO TRY DIFFERENT OPTIONS
         playlistView.horizontalHeader().setSectionResizeMode(
             QHeaderView.Stretch)
 
-        # playlistView.clicked.connect(self.singleClickedTest)
-        # playlistView.doubleClicked.connect(self.doubleClickedPlayPause)
-        playlistView.setSortingEnabled(True)
-
         playlistView.doubleClicked.connect(self._doubleCLickedWidget)
+        playlistView.customContextMenuRequested.connect(
+            self.customMenuRequested)
 
         self.playlistMappings[uuid] = playlistView
-        self.insertWidget(1, playlistView)       # FUCK THIS SHIT
-        #self.setCurrentIndex(1)                  # IF IT BREAKS ITS PROBABLY FROM HERE!!!!!!!!!!!! fix it
-        #self.setCurrentWidget(self.playlistMappings[uuid])
+        self.insertWidget(DEFAULT_VIEWS_COUNT, playlistView)
 
     def _doubleCLickedWidget(self, index):
         uuid = index.model().getUuid()
@@ -233,34 +272,69 @@ class StackedWidget(QStackedWidget):
 
     def createLibraryPlaylisView(self, uuid):
         playlistModel = PlaylistModel(uuid)
+
         playlistView = QTableView(self)
         playlistView.setModel(playlistModel)
-        # playlistView.setCurrentIndex(
-        #     playlistModel.index(self.player.playlistCurrentIndex(), 0))
+        playlistView.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+
+        playlistView.setSortingEnabled(True)
         playlistView.setSelectionBehavior(QAbstractItemView.SelectRows)
         playlistView.setShowGrid(False)
-        # TODO TRY DIFFERENT OPTIONS
         playlistView.horizontalHeader().setSectionResizeMode(
             QHeaderView.Stretch)
 
-        # playlistView.clicked.connect(self.singleClickedTest)
-        # playlistView.doubleClicked.connect(self.doubleClickedPlayPause)
-
-        playlistView.setSortingEnabled(True)
-        # playlistView.doubleClicked.connect(self._doubleCLicked)
-        
         playlistView.doubleClicked.connect(self._doubleCLickedWidget)
-        
-        # name = 'Songs'
-        # self.defaultViewsMappings[name] = playlistView
+        playlistView.customContextMenuRequested.connect(
+            self.customMenuRequested)
 
         self.playlistMappings[uuid] = playlistView
         self.insertWidget(0, playlistView)
-        #self.setCurrentIndex(0)
         self.setCurrentWidget(self.playlistMappings[uuid])
+
+    def __setContextMenuActions(self):
+        self.editAct = QAction("Edit", self)
+        self.editAct.setStatusTip("Edit this file's metadata")
+        self.editAct.triggered.connect(self.editData)
+
+    @QtCore.pyqtSlot(UUID, list)
+    def updatePlaylist(self, uuid, mediaFiles):
+        widget = self.playlistMappings[uuid]
+        model = widget.model()
+        model.insertMedia(model.rowCount(), mediaFiles)
+        model.reset()
+        model.insertMedia(model.rowCount(), mediaFiles)
 
     @QtCore.pyqtSlot(UUID, list)
     def appendToPlaylist(self, uuid, mediaFiles):
         widget = self.playlistMappings[uuid]
         model = widget.model()
         model.insertMedia(model.rowCount(), mediaFiles)
+
+    @QtCore.pyqtSlot(UUID, int)
+    def setWidgetIndex(self, uuid, row):
+        widget = self.playlistMappings[uuid]
+        index = widget.model().index(row, 0)
+        widget.setCurrentIndex(index)
+
+    @QtCore.pyqtSlot(QtCore.QPoint)
+    def customMenuRequested(self, pos):
+        menu = QMenu(self)
+        row = self.currentWidget().indexAt(pos).row()
+        song = self.currentWidget().model().getDataAtRow(row)
+        self.editAct.setData(song)
+        menu.addAction(self.editAct)
+        menu.popup(self.mapToGlobal(pos))
+
+    def editData(self):
+        song = self.editAct.data()
+        available_metadata = song.get_values(MetadataDialog.METADATA_INFO)
+        dialog = MetadataDialog(available_metadata)
+        dialogCode = dialog.exec_()
+        if dialogCode == QDialog.Accepted:
+            result = dialog.getResultDict()
+            for k, v in result.items():
+                song.set_tag(k, v)
+            song.save()
+        if dialogCode == QDialog.Rejected:
+            return
+

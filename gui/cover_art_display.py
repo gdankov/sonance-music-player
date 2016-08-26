@@ -3,7 +3,6 @@ from PyQt5.QtCore import pyqtSignal, Qt, QSize
 from PyQt5 import QtGui, QtCore
 
 
-
 class CoverArt(QLabel):
 
     clicked = pyqtSignal()
@@ -11,9 +10,6 @@ class CoverArt(QLabel):
     def __init__(self, clickable=False, parent=None):
         super(CoverArt, self).__init__(parent)
         self.setClickable(clickable)
-
-        # self.setMinimumSize(180, 180)
-        # self.setMaximumSize(300, 300)
 
         self.setScaledContents(False)
 
@@ -42,7 +38,8 @@ class CoverArt(QLabel):
             self.pixmap = pixmap
             self.setPixmap(pixmap)
         else:
-            self.setPixmap(QtGui.QPixmap(':/left_sidebar_icons/default_album_cover.png'))
+            self.setPixmap(
+                QtGui.QPixmap(':/left_sidebar_icons/default_album_cover.png'))
 
     def scaledPixmap(self):
         return self.pixmap.scaled(self.size(), Qt.KeepAspectRatio,
@@ -86,7 +83,6 @@ class CoverArtBox(QWidget):
         self.layout = QVBoxLayout()
         self.layout.setContentsMargins(0, 0, 0, 0)
         self.layout.setSpacing(0)
-        # self.setFlat(True)
 
         defaultAlbumCover = QtGui.QPixmap(':/left_sidebar_icons/default_album_cover.png')
 
@@ -100,7 +96,6 @@ class CoverArtBox(QWidget):
         self.infoLabel = InformationLabel()
         self.coverArt.setSizePolicy(QSizePolicy.MinimumExpanding,
                                     QSizePolicy.Fixed)
-        # self.coverArt.clicked.connect(self.)
 
         self.layout.addWidget(self.coverArt)
         self.layout.addWidget(self.infoLabel, 0, Qt.AlignBottom)

@@ -9,14 +9,16 @@ DEFAULT_PLAYLIST_NAME = 'Untitled Unmastered'
 
 class PlaylistManger(QObject):
 
-    customPlaylistCreated = pyqtSignal(UUID, str)      # merge into one
-    libraryPlaylistCreated = pyqtSignal(UUID)     # maybe
+    customPlaylistCreated = pyqtSignal(UUID, str)
+    libraryPlaylistCreated = pyqtSignal(UUID)
 
     currentPlaylistChanged = pyqtSignal(QMediaPlaylist, int, bool)
     currentMediaChanged = pyqtSignal(QMediaContent)
 
     addedToLibraryPlaylist = pyqtSignal(UUID, list)
     addedToCustomPlaylist = pyqtSignal(UUID, list)
+
+    updatedLibraryPlaylist = pyqtSignal(UUID, list)
 
     playlistRemoved = pyqtSignal(UUID)
 
@@ -49,7 +51,10 @@ class PlaylistManger(QObject):
             playlist.add_directory(urls)
 
         self._libraryPlaylist = playlist
+        self._currentPlaylist = self._libraryPlaylist
         self.libraryPlaylistCreated.emit(playlist.getUuid())
+        self.currentPlaylistChanged.emit(
+            self._libraryPlaylist.internalPlaylist, 0, False)
 
     def addToLibraryPlaylist(self, directories=None):
         if directories and isinstance(directories, list):
@@ -61,13 +66,27 @@ class PlaylistManger(QObject):
             self.addedToLibraryPlaylist.emit(
                 self._libraryPlaylist.getUuid(), addedSongs)
 
+    def updateLibraryPlaylist(self, directories):
+        self._libraryPlaylist.clear()
+        if directories and isinstance(directories, list):
+            addedSongs = self._libraryPlaylist.add_directories(directories)
+        elif directories:
+            addedSongs = self._libraryPlaylist.add_directory(directories)
+        else:
+            addedSongs = []
+
+        self.updatedLibraryPlaylist.emit(
+            self._libraryPlaylist.getUuid(), addedSongs)
+
     def addSongsToCustomPlaylist(self, uuid, urls):
         playlist = self.getCustomPlaylist(uuid)
         if not playlist or not urls:
             return None
         addedSongs = []
         for url in urls:
-            addedSongs.append(playlist.add_song(url))
+            song = playlist.add_song(url)
+            if song:
+                addedSongs.append(song)
 
         if addedSongs:
             self.addedToCustomPlaylist.emit(
@@ -96,51 +115,67 @@ class PlaylistManger(QObject):
             playlist.setCurrentIndex(index)
 
     def removePlaylist(self, uuid):
-        for index, playlist in enumerate(self._customPlaylists):
-            if playlist.getUuid() == uuid and self.isCurrentPlaylist(playlist):
-                del self._customPlaylists[index]
-                if self._libraryPlaylist:
-                    self._currentPlaylist = self._libraryPlaylist
-                    self.currentPlaylistChanged.emit(
-                        self._currentPlaylist.internalPlaylist, 0, False)
-                else:
-                    self._currentPlaylist = None
-                    self.currentPlaylistChanged.emit(None, 0, False)
-                self.playlistRemoved.emit(uuid)
-            elif playlist.getUuid() == uuid:
-                del self._customPlaylists[index]
-                self.playlistRemoved.emit(uuid)
+        playlist = self.getCustomPlaylist(uuid)
+        index = self.getCustomPlaylistIndex(playlist)
+        if self.isCurrentPlaylist(playlist.getUuid()):
+            del self._customPlaylists[index]
+            self._currentPlaylist = self._libraryPlaylist
+            self.currentPlaylistChanged.emit(
+                self._currentPlaylist.internalPlaylist, 0, False)
+            self.playlistRemoved.emit(uuid)
+        elif playlist.getUuid() == uuid:
+            del self._customPlaylists[index]
+            self.playlistRemoved.emit(uuid)
 
     def getBasicSongInfo(self, media):
         title, artist, cover = None, None, None
         mediaPath = media.canonicalUrl().path()
         currentPlaylist = self._currentPlaylist
+
         for song in currentPlaylist.songs():
             if song.get_abs_path() == mediaPath:
-                title = self.__saveMetadataCall(song.get_title())
-                artist = self.__saveMetadataCall(song.get_artist())
+                title = self.__safeMetadataCall(song.get_title())
+                artist = self.__safeMetadataCall(song.get_artist())
                 cover = song.get_front_cover().data
+                return title, artist, cover
         return title, artist, cover
 
-    def __saveMetadataCall(self, call):
+    def __safeMetadataCall(self, call):
         try:
             return call[0]
         except IndexError:
             return ''
 
-    def getCurrentPlaylist(self):
-        return self._currentPlaylist
+    def currentInternalPlaylist(self):
+        return self._currentPlaylist.internalPlaylist
 
-    def isCurrentPlaylist(self, playlist):
-        return self.getCurrentPlaylist() == playlist
+    def currentInternalPlaylistShuffled(self):
+        return self._currentPlaylist.internalPlaylist.shuffle()
+
+    def getCurrentPlaylistUuid(self):
+        return self._currentPlaylist.getUuid()
+
+    def getCurrentSongIndex(self):
+        return self._currentPlaylist.internalPlaylist.currentIndex()
+
+    def isCurrentPlaylist(self, uuid):
+        return self.getCurrentPlaylistUuid() == uuid
 
     def getLibraryPlaylist(self):
         return self._libraryPlaylist
+
+    def getCustomPlaylists(self):
+        return self._customPlaylists
 
     def getCustomPlaylist(self, uuid):
         for playlist in self._customPlaylists:
             if playlist.getUuid() == uuid:
                 return playlist
+
+    def getCustomPlaylistIndex(self, playlist):
+        for i, p in enumerate(self._customPlaylists):
+            if p == playlist:
+                return i
 
     def hasLibraryPlaylist(self):
         if self._libraryPlaylist:

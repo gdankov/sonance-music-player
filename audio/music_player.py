@@ -10,9 +10,11 @@ class AudioPlayer(QObject):
 
     songPositionChanged = pyqtSignal(int)
     songDurationChanged = pyqtSignal(int)
+    stateChanged = pyqtSignal(int)
     playlistChanged = pyqtSignal(QMediaPlaylist, int)
 
     currentSongChanged = pyqtSignal(str, str, bytes)
+    currentSelectionChanged = pyqtSignal(UUID, int)
 
     customPlaylistCreated = pyqtSignal(UUID, str)
     libraryPlaylistCreated = pyqtSignal(UUID)
@@ -20,21 +22,25 @@ class AudioPlayer(QObject):
     addedToLibraryPlaylist = pyqtSignal(UUID, list)
     addedToCustomPlaylist = pyqtSignal(UUID, list)
 
+    updatedLibraryPlaylist = pyqtSignal(UUID, list)
+
     playlistRemoved = pyqtSignal(UUID)
 
-    def __init__(self, volumeLevel=40, parent=None):
+    def __init__(self, volumeLevel=40, playbackMode=QMediaPlaylist.Sequential,
+                 parent=None):
         super(AudioPlayer, self).__init__(parent)
 
         self.__player = QMediaPlayer()
         self.__player.setVolume(volumeLevel)
+
         self.__player.currentMediaChanged.connect(self._onMediaChanged)
+        self.__player.stateChanged.connect(
+            lambda state: self.stateChanged.emit(int(state)))
         self.__player.positionChanged.connect(
             lambda x: self.songPositionChanged.emit(x))
         self.__player.durationChanged.connect(
             lambda x: self.songDurationChanged.emit(x))
-        #self.__player.setAudioRole(QAudio.MusicRole)  # supported in  Qt 5.6
 
-        # print(self.__player.supportedMimeTypes())  # added
         self.__playlistManager = PlaylistManger()
 
         self.__playlistManager.customPlaylistCreated.connect(
@@ -47,9 +53,6 @@ class AudioPlayer(QObject):
         self.__playlistManager.currentPlaylistChanged.connect(
             lambda p, i: self.playlistChanged.emit(p, i))
 
-        # self.__playlistManager.currentMediaChanged.connect(
-        #     self._onMediaChanged)
-
         self.__playlistManager.playlistRemoved.connect(
             lambda uuid: self.playlistRemoved.emit(uuid))
 
@@ -58,13 +61,8 @@ class AudioPlayer(QObject):
         self.__playlistManager.addedToCustomPlaylist.connect(
             lambda uuid, l: self.addedToCustomPlaylist.emit(uuid, l))
 
-    def setMuted(self, muted):
-        pass
-
-    def isMuted(self):
-        pass
-
-    # signal -> mutedChanged(bool muted)
+        self.__playlistManager.updatedLibraryPlaylist.connect(
+            lambda uuid, l: self.updatedLibraryPlaylist.emit(uuid, l))
 
     def createCustomPlaylist(self, name=None, urls=None):
         self.__playlistManager.createCustomPlaylist(name, urls)
@@ -75,8 +73,8 @@ class AudioPlayer(QObject):
     def addToLibraryPlaylist(self, url=None):
         self.__playlistManager.addToLibraryPlaylist(url)
 
-    def addAndSetPlaylist(self, url, index, name=None):
-        self.__playlistManager.addAndSetPlaylist(url, index, name)
+    def updateLibraryPlaylist(self, url=None):
+        self.__playlistManager.updateLibraryPlaylist(url)
 
     def renamePlaylist(self, uuid, newName):
         self.__playlistManager.renamePlaylist(uuid, newName)
@@ -85,7 +83,17 @@ class AudioPlayer(QObject):
         self.__playlistManager.addSongsToCustomPlaylist(uuid, urls)
 
     def setPlaylist(self, uuid, index=0):
-        self.__playlistManager.setPlaylist(uuid, index)
+        if (self.__player.playlist() and
+                self.__playlistManager.isCurrentPlaylist(uuid)):
+            if index == self.__player.playlist().currentIndex():
+                if self.__player.state() == QMediaPlayer.PlayingState:
+                    self.__player.pause()
+                else:
+                    self.__player.play()
+            else:
+                self.__player.playlist().setCurrentIndex(index)
+        else:
+            self.__playlistManager.setPlaylist(uuid, index)
 
     def hasLibraryPlaylist(self):
         return self.__playlistManager.hasLibraryPlaylist()
@@ -119,6 +127,10 @@ class AudioPlayer(QObject):
         if self.__player.playlist():
             self.__player.pause()
 
+    def stop(self):
+        if self.__player.playlist():
+            self.__player.stop()
+
     def previousEnhanced(self, sameSongMillis):
         if self.__player.position() <= sameSongMillis:
             self.previous()
@@ -147,11 +159,6 @@ class AudioPlayer(QObject):
         if self.__player.playlist():
             self.__player.playlist().setCurrentIndex(index)
 
-    # TODO
-    def setPlaybackMode(self, mode):
-        # playlist.setPlaybackMode(PlaybackMode mode)
-        pass
-
     def _onChangedPlaylist(self, playlist, index, playIt=False):
         self.__player.setPlaylist(playlist)
         if playlist:
@@ -160,35 +167,106 @@ class AudioPlayer(QObject):
             self.play()
 
     def _onMediaChanged(self, media):
+        if media.isNull() and self.__player.playlist():
+            self.__player.playlist().setCurrentIndex(0)
+            media = self.__player.playlist().media(0)
+        if media.isNull():
+            return
+
         title, artist, cover = self.__playlistManager.getBasicSongInfo(media)
+
         self.currentSongChanged.emit(title, artist, cover)
 
-    def saveState(self):
-        # settings = QSettings(QCoreApplication.organizationName(),
-        #                      QCoreApplication.applicationName())
+        uuid = self.__playlistManager.getCurrentPlaylistUuid()
+        index = self.__playlistManager.getCurrentSongIndex()
+        self.currentSelectionChanged.emit(uuid, index)
 
-        # settings.beginGroup("music_player")
+    # def saveSettings(self):
+    #     # settings = QSettings(QSettings.IniFormat, QSettings.UserScope,
+    #     #                      QCoreApplication.organizationName(),
+    #     #                      QCoreApplication.applicationName())
 
-        # if self._libraryPlaylist:
-        #     libraryDirectories = self._libraryPlaylist.getDirectories()
-        #     settings.beginWriteArray('library_playlist',
-        #                              len(libraryDirectories))
-        #     for index, value in enumerate(libraryDirectories):
-        #         settings.setArrayIndex(index)
-        #         settings.setValue("url", value)
-        #     settings.endArray()
+    #     # settings.beginGroup("music_player")
 
-        # # if self._customPlaylists:
-        # #     settings.beginWriteArray('custom_playlists',
-        # #                              len(self._customPlaylists)):
-        # #     settings.setValue()
-        # #     settings.endArray()
+    #     # # if self.__playlistManager.getLibraryPlaylist():
+    #     # #     libraryDirectories = self.__playlistManager.getLibraryPlaylist().getDirectories()
+    #     # #     settings.beginWriteArray('library_playlist',
+    #     # #                              len(libraryDirectories))
+    #     # #     for index, value in enumerate(libraryDirectories):
+    #     # #         settings.setArrayIndex(index)
+    #     # #         settings.setValue("url", value)
+    #     # #     settings.endArray()
+
+    #     # customPlaylists = self.__playlistManager.getCustomPlaylists()
+    #     # settings.beginWriteArray('custom_playlists',
+    #     #                          len(customPlaylists))
+    #     # for index, value in enumerate(customPlaylists):
+    #     #     settings.setArrayIndex(index)
+    #     #     playlistName = settings.value('name', value.getName())
+    #     #     playlistUrls = value.getAddedSongUrls()
+    #     #     settings.beginWriteArray(playlistName,
+    #     #                              len(playlistUrls))
+    #     #     for i, v in enumerate(playlistUrls):
+    #     #         settings.setArrayIndex(i)
+    #     #         settings.setValue("url", v)
+    #     #     settings.endArray()
+    #     # settings.endArray()
+
+    #     # settings.endGroup()
+    #     # if self.__playlistManager.getLibraryPlaylist():
+    #     #     libraryDirectories = self.__playlistManager.getLibraryPlaylist().getDirectories()
+    #     #     settings.beginWriteArray('library_playlist',
+    #     #                              len(libraryDirectories))
+    #     #     for index, value in enumerate(libraryDirectories):
+    #     #         settings.setArrayIndex(index)
+    #     #         settings.setValue("url", value)
+    #     #     settings.endArray()
+
+    #     customPlaylists = self.__playlistManager.getCustomPlaylists()
+    #     for playlist in customPlaylists:
+    #         playlistName = playlist.getName()
+    #         for url in playlist:
+    #             pass
+
+    # def restoreSettings(self):
+    #     settings = QSettings(QSettings.IniFormat, QSettings.UserScope,
+    #                          QCoreApplication.organizationName(),
+    #                          QCoreApplication.applicationName())
+
+    #     settings.beginGroup("music_player")
+
+    #     # size = settings.beginReadArray('library_playlist')
+    #     # libraryDirectories = []
+    #     # for i in range(size):
+    #     #     settings.setArrayIndex(i)
+    #     #     libraryDirectories.append(settings.value("url"))
+    #     # settings.endArray()
+
+    #     customPlaylists = {}
+    #     size = settings.beginReadArray('custom_playlists')
+    #     for i in range(size):
+    #         urls = []
+    #         settings.setArrayIndex(i)
+    #         playlistName = settings.value('name')
+    #         print(playlistName)
+    #         size2 = settings.beginReadArray(playlistName)
+    #         for j in range(size2):
+    #             settings.setArrayIndex(j)
+    #             url = settings.value("url")
+    #             urls.append(url)
+    #         settings.endArray()
+    #         customPlaylists[playlistName] = urls
+    #     settings.endArray()
+
+    #     settings.endGroup()
+
+    #     print('-------')
+    #     print(customPlaylists)
 
 
-        # settings.endGroup()
-        pass
 
-    def restoreState(self):
+
+
         # settings = QSettings(QCoreApplication.organizationName(),
         #                      QCoreApplication.applicationName())
         # settings.beginGroup("music_player")

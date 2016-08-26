@@ -88,16 +88,25 @@ class ID3File(MediaFile):
         for value in values:
             if value in self.R_ID3_MAPPINGS:
                 tag = self.R_ID3_MAPPINGS[value]
-
                 if tag.startswith('T'):
                     text_frame = mutagen_file.getall(tag)
                     if text_frame:
                         text_frame = text_frame[0]
-                        if get_encodings:
-                            result_values[value] = (int(text_frame.encoding),
-                                                    text_frame.text)
+                        if tag == 'TDRC':
+                            if get_encodings:
+                                result_values[value] = (
+                                    int(text_frame.encoding),
+                                    text_frame.text[0].get_text())
+                            else:
+                                result_values[value] = text_frame.text[
+                                    0].get_text()
                         else:
-                            result_values[value] = text_frame.text
+                            if get_encodings:
+                                result_values[value] = (
+                                    int(text_frame.encoding),
+                                    text_frame.text)
+                            else:
+                                result_values[value] = text_frame.text
                     else:
                         result_values[value] = []
                 elif tag == self.R_ID3_MAPPINGS['comment']:
@@ -211,3 +220,4 @@ class MP3AudioFile(ID3File, StreamInfoMixin):
         info['format'] = 'MPEG-1 Layer {} - {}'.format(file.info.layer,
                                                        id3version)
         return info
+

@@ -42,7 +42,6 @@ class Image:
         if isinstance(image_type, int):
             try:
                 image_type = list(ImageType)[image_type]
-                print(type(image_type))
             except IndexError:
                 image_type = ImageType.OTHER
         self.image_type = image_type
@@ -135,4 +134,7 @@ class MediaFile:
         try:
             return all_available_images['front_cover']
         except KeyError:
-            return Image(b'')               #TODO choose another image if there's no front cover available
+            return Image(b'')     # TODO choose another image if there's no front cover available
+
+    def __str__(self):
+        return self.get_title()
